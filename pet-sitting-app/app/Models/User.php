@@ -142,6 +142,11 @@ class User extends Authenticatable
         return $this->hasMany(NameUpdateRequest::class);
     }
 
+    public function profileChangeRequests()
+    {
+        return $this->hasMany(ProfileChangeRequest::class);
+    }
+
     public function reviews()
     {
         return $this->hasMany(Review::class, 'sitter_id');

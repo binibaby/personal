@@ -43,6 +43,8 @@ class ProfileChangeRequest extends Model
         'last_approved_at' => 'datetime',
         'hourly_rate' => 'decimal:2',
         'old_hourly_rate' => 'decimal:2',
+        'experience' => 'decimal:1',
+        'old_experience' => 'decimal:1',
     ];
 
     // Relationships

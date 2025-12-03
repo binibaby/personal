@@ -26,10 +26,13 @@ class NameUpdateController extends Controller
     public function getUsers(Request $request)
     {
         try {
-            // Only get users who have submitted name update requests
+            // Get users who have submitted name update requests OR profile change requests
             $query = User::select('id', 'name', 'first_name', 'last_name', 'email', 'phone', 'role', 'created_at', 'profile_image', 
                                  'experience', 'hourly_rate', 'bio', 'specialties', 'pet_breeds', 'selected_pet_types', 'address', 'status')
-                ->whereHas('nameUpdateRequests'); // Only users with name update requests
+                ->where(function($q) {
+                    $q->whereHas('nameUpdateRequests')
+                      ->orWhereHas('profileChangeRequests');
+                }); // Users with name update requests OR profile change requests
 
             // Apply search filter
             if ($request->has('search') && !empty($request->search)) {
@@ -267,6 +270,23 @@ class NameUpdateController extends Controller
                             ];
                         }
                         
+                        if ($request->experience && $request->experience != $request->old_experience) {
+                            $oldExp = $request->old_experience ? $request->old_experience . ' years' : 'Not set';
+                            $newExp = $request->experience . ' years';
+                            $results[] = [
+                                'id' => $request->id . '_experience',
+                                'type' => 'profile_update',
+                                'field_name' => 'Years of Experience',
+                                'old_value' => $oldExp,
+                                'new_value' => $newExp,
+                                'reason' => $request->reason,
+                                'admin_notes' => $request->admin_notes,
+                                'status' => $request->status,
+                                'created_at' => $request->created_at,
+                                'reviewer' => $request->reviewer
+                            ];
+                        }
+                        
                         // Handle specialties/services changes
                         if ($request->specialties && $request->specialties !== $request->old_specialties) {
                             $oldSpecialties = $request->old_specialties ? (is_array($request->old_specialties) ? implode(', ', $request->old_specialties) : $request->old_specialties) : 'No services specified';
@@ -305,8 +325,8 @@ class NameUpdateController extends Controller
                             $oldValue = $request->old_hourly_rate ? '₱' . $request->old_hourly_rate . '/hour' : 'Not set';
                             $newValue = $request->hourly_rate ? '₱' . $request->hourly_rate . '/hour' : 'Not set';
                         } elseif ($request->field_name === 'experience') {
-                            $oldValue = $request->old_value ?: 'Not specified';
-                            $newValue = $request->new_value ?: 'Not specified';
+                            $oldValue = $request->old_experience ? $request->old_experience . ' years' : 'Not set';
+                            $newValue = $request->experience ? $request->experience . ' years' : 'Not set';
                         } elseif ($request->field_name === 'bio') {
                             $oldValue = $request->old_value ?: 'No bio provided';
                             $newValue = $request->new_value ?: 'No bio provided';

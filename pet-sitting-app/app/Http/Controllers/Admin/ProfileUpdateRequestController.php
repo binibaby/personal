@@ -149,6 +149,11 @@ class ProfileUpdateRequestController extends Controller
                 $user->hourly_rate = $profileRequest->hourly_rate;
             }
 
+            // Update experience if changed (for pet sitters) - compare as numbers
+            if ($profileRequest->experience !== null && (float)$profileRequest->experience != (float)($profileRequest->old_experience ?? 0)) {
+                $user->experience = (string)$profileRequest->experience; // Store as string to match user table format
+            }
+
             // Update the full name if first or last name changed
             if (($profileRequest->first_name && $profileRequest->first_name !== $profileRequest->old_first_name) || 
                 ($profileRequest->last_name && $profileRequest->last_name !== $profileRequest->old_last_name)) {
@@ -375,6 +380,10 @@ class ProfileUpdateRequestController extends Controller
         }
         if ($request->hourly_rate != $request->old_hourly_rate) {
             $fields[] = 'Hourly Rate';
+        }
+        // Compare experience as numbers
+        if ((float)($request->experience ?? 0) != (float)($request->old_experience ?? 0)) {
+            $fields[] = 'Years of Experience';
         }
         
         return $fields;

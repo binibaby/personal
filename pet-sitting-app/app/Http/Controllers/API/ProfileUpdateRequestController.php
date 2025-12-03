@@ -36,6 +36,7 @@ class ProfileUpdateRequestController extends Controller
             'last_name' => 'sometimes|string|max:255',
             'phone' => 'sometimes|string|max:20',
             'hourly_rate' => 'sometimes|numeric|min:0|max:9999999.99',
+            'experience' => 'sometimes|numeric|min:0|max:100',
             'reason' => 'required|string|max:1000',
         ]);
 
@@ -108,6 +109,21 @@ class ProfileUpdateRequestController extends Controller
                 $newValues['hourly_rate'] = $request->hourly_rate;
             }
 
+            // Check experience change - normalize values for comparison (handle null/empty)
+            // Convert to numeric for proper comparison and storage
+            $currentExperience = $user->experience ? (float)$user->experience : null;
+            $newExperience = null;
+            
+            if ($request->has('experience') && $request->experience !== '' && $request->experience !== null) {
+                $newExperience = (float)$request->experience;
+                // Compare as numbers to handle decimal values properly
+                if ($newExperience != $currentExperience) {
+                    $updatedFields[] = 'experience';
+                    $oldValues['experience'] = $currentExperience;
+                    $newValues['experience'] = $newExperience;
+                }
+            }
+
             if (empty($updatedFields)) {
                 return response()->json([
                     'success' => false,
@@ -123,10 +139,12 @@ class ProfileUpdateRequestController extends Controller
                 'last_name' => $request->last_name ?? $user->last_name,
                 'phone' => $request->phone ?? $user->phone,
                 'hourly_rate' => $request->hourly_rate ?? $user->hourly_rate,
+                'experience' => $request->has('experience') ? ($newExperience !== null ? $newExperience : null) : ($user->experience ?: null),
                 'old_first_name' => $oldValues['first_name'] ?? $user->first_name,
                 'old_last_name' => $oldValues['last_name'] ?? $user->last_name,
                 'old_phone' => $oldValues['phone'] ?? $user->phone,
                 'old_hourly_rate' => $oldValues['hourly_rate'] ?? $user->hourly_rate,
+                'old_experience' => $oldValues['experience'] ?? ($user->experience ?: null),
                 'old_value' => json_encode($oldValues),
                 'new_value' => json_encode($newValues),
                 'reason' => $request->reason,
@@ -244,6 +262,10 @@ class ProfileUpdateRequestController extends Controller
         }
         if ($request->hourly_rate != $request->old_hourly_rate) {
             $fields[] = 'Hourly Rate';
+        }
+        // Compare experience as numbers
+        if ((float)($request->experience ?? 0) != (float)($request->old_experience ?? 0)) {
+            $fields[] = 'Years of Experience';
         }
         
         return $fields;

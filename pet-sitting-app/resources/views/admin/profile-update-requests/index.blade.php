@@ -547,6 +547,11 @@ function getRequestedChanges(request) {
     if (request.hourly_rate != request.old_hourly_rate) {
         changes.push(`Hourly Rate: "₱${request.old_hourly_rate || 'Not set'}" → "₱${request.hourly_rate}"`);
     }
+    if (request.experience != request.old_experience) {
+        const oldExp = request.old_experience ? `${request.old_experience} years` : 'Not set';
+        const newExp = request.experience ? `${request.experience} years` : 'Not set';
+        changes.push(`Years of Experience: "${oldExp}" → "${newExp}"`);
+    }
     
     return changes.length > 0 ? changes.join('<br>') : 'No changes';
 }
@@ -704,6 +709,21 @@ function getDetailedChanges(request) {
                     <span class="text-red-600">₱${request.old_hourly_rate || 'Not set'}</span>
                     <span class="mx-2">→</span>
                     <span class="text-green-600">₱${request.hourly_rate}</span>
+                </div>
+            </div>
+        `);
+    }
+    
+    if (request.experience != request.old_experience) {
+        const oldExp = request.old_experience ? `${request.old_experience} years` : 'Not set';
+        const newExp = request.experience ? `${request.experience} years` : 'Not set';
+        changes.push(`
+            <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                <span class="text-sm font-medium text-gray-500">Years of Experience:</span>
+                <div class="text-sm text-gray-900">
+                    <span class="text-red-600">${oldExp}</span>
+                    <span class="mx-2">→</span>
+                    <span class="text-green-600">${newExp}</span>
                 </div>
             </div>
         `);

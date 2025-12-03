@@ -42,7 +42,7 @@ class EchoService implements EchoServiceInterface {
         if (!__DEV__) {
           host = 'localhost';
         } else {
-          host = '192.168.100.226'; // Development fallback
+          host = '192.168.100.239'; // Development fallback (matches primary IP)
         }
         console.warn('Could not parse base URL, using default host:', error);
       }

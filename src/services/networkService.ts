@@ -84,7 +84,8 @@ export class NetworkService {
 
     // Try the most likely IPs first (prioritize current WiFi)
     const priorityIPs = [
-      '192.168.100.225',  // Current WiFi IP (primary)
+      '192.168.100.239',  // Current WiFi IP (primary)
+      '192.168.100.225',  // Previous WiFi IP (fallback)
       '192.168.100.226',  // Previous WiFi IP (fallback)
       '172.20.10.2',      // Mobile data IP (fallback)
       '172.20.10.1',      // Mobile hotspot gateway
@@ -142,7 +143,7 @@ export class NetworkService {
     }
 
     // If all fail, use the current WiFi IP as default but mark as disconnected
-    this.currentBaseUrl = `http://192.168.100.225:8000`;
+    this.currentBaseUrl = `http://192.168.100.239:8000`;
     this.isConnected = false;
     // Silently use default
     // console.log(`⚠️ All IPs failed. Using current WiFi IP as default: ${this.currentBaseUrl}`);
@@ -170,9 +171,9 @@ export class NetworkService {
     if (!__DEV__) {
       return API_BASE_URL;
     }
-    // If currentBaseUrl is empty, use the default from config (192.168.100.225)
+    // If currentBaseUrl is empty, use the default from config (192.168.100.239)
     if (!this.currentBaseUrl) {
-      this.currentBaseUrl = 'http://192.168.100.225:8000';
+      this.currentBaseUrl = 'http://192.168.100.239:8000';
     }
     return this.currentBaseUrl;
   }
@@ -618,6 +619,17 @@ export const submitProfileUpdateRequest = async (data: {
     // Only include hourly_rate for pet sitters and if it's not empty
     if (userRole === 'pet_sitter' && data.hourlyRate && data.hourlyRate.trim() !== '') {
       requestBody.hourly_rate = parseFloat(data.hourlyRate);
+    }
+    
+    // Always include experience for pet sitters (even if empty) so backend can detect changes
+    // Convert to number for proper validation and storage
+    if (userRole === 'pet_sitter') {
+      if (data.experience && data.experience.trim() !== '') {
+        const experienceNum = parseFloat(data.experience.trim());
+        requestBody.experience = isNaN(experienceNum) ? null : experienceNum;
+      } else {
+        requestBody.experience = null;
+      }
     }
     
     const response = await makeApiCall('/api/profile/update-request', {
