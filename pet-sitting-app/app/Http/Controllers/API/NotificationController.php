@@ -97,21 +97,15 @@ class NotificationController extends Controller
         
         return $notifications->filter(function($notification) use ($isPetSitter) {
             if ($isPetSitter) {
-                // Pet sitters see: booking requests, messages, reviews, system notifications, profile updates, ID verification
-                return in_array($notification->type, [
-                    'booking',
-                    'booking_confirmed',
-                    'booking_completed',
-                    'session_started',
-                    'message', 
-                    'review',
-                    'new_review',
-                    'system',
-                    'profile_update_approved',
-                    'profile_update_rejected',
-                    'id_verification_approved',
-                    'id_verification_rejected'
-                ]);
+                // Pet sitters see: all booking notifications, messages, reviews, system notifications, profile updates, ID verification
+                // Show all notifications that belong to this user (user_id match is already done in query)
+                // Only filter out admin-specific notifications
+                $excludedTypes = ['admin_notification'];
+                if (in_array($notification->type, $excludedTypes)) {
+                    return false;
+                }
+                // Allow all other notification types for pet sitters
+                return true;
             } else {
                 // Pet owners see: all booking notifications, messages, system notifications, profile updates
                 // (NO ID verification notifications)

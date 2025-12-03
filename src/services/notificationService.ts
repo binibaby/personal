@@ -298,15 +298,26 @@ class NotificationService {
         
         // Otherwise, use the old filtering logic
         if (isPetSitter) {
-          // Pet sitters see: booking requests, messages, reviews, system notifications, profile updates, ID verification
-          const matches = notification.type === 'booking' || 
-                 notification.type === 'message' || 
-                 notification.type === 'review' || 
-                 notification.type === 'system' ||
-                 notification.type === 'profile_update_approved' || 
-                 notification.type === 'profile_update_rejected' ||
-                 notification.type === 'id_verification_approved' || 
-                 notification.type === 'id_verification_rejected';
+          // Pet sitters see: all booking notifications, messages, reviews, system notifications, profile updates, ID verification, payment/wallet notifications
+          const allowedTypes = [
+            'booking',
+            'booking_confirmed',
+            'booking_completed',
+            'booking_cancelled',
+            'session_started',
+            'message',
+            'review',
+            'new_review',
+            'system',
+            'profile_update_approved',
+            'profile_update_rejected',
+            'id_verification_approved',
+            'id_verification_rejected',
+            'payment_received',
+            'wallet_updated',
+            'earnings_received'
+          ];
+          const matches = allowedTypes.includes(notification.type);
           console.log(`🔍 Pet sitter notification ${notification.id} (${notification.type}): ${matches}`);
           return matches;
         } else {
