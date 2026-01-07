@@ -3,12 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import authService from '../../services/authService';
 import { DashboardMetrics } from '../../services/dashboardService';
 import { notificationService } from '../../services/notificationService';
 import { reverbMessagingService } from '../../services/reverbMessagingService';
+import realtimeLocationService from '../../services/realtimeLocationService';
 // @ts-ignore
 import FindIcon from '../../assets/icons/find.png';
 // @ts-ignore
@@ -47,7 +48,7 @@ const reflectionColors = {
 
 const PetOwnerDashboard = () => {
   const router = useRouter();
-  const { user, profileUpdateTrigger } = useAuth();
+  const { user, profileUpdateTrigger, currentLocation } = useAuth();
   const [imageError, setImageError] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [upcomingBookings, setUpcomingBookings] = useState<Booking[]>([]);
@@ -59,6 +60,8 @@ const PetOwnerDashboard = () => {
   const [dashboardMetrics, setDashboardMetrics] = useState<DashboardMetrics>({});
   const [notificationCount, setNotificationCount] = useState<number>(0);
   const [messageCount, setMessageCount] = useState<number>(0);
+  const [recommendedSitters, setRecommendedSitters] = useState<any[]>([]);
+  const [loadingSitters, setLoadingSitters] = useState<boolean>(false);
   
   console.log('💳 Current ownerStats state:', ownerStats);
   
@@ -70,6 +73,7 @@ const PetOwnerDashboard = () => {
   useEffect(() => {
     checkAuthentication();
     loadDashboardData();
+    loadRecommendedSitters();
     
     // Load notification and message counts
     const loadCounts = async () => {
@@ -156,6 +160,108 @@ const PetOwnerDashboard = () => {
     }, [])
   );
 
+  // Load recommended sitters
+  const loadRecommendedSitters = async () => {
+    if (!currentLocation) {
+      console.log('📍 No location available for sitter recommendations');
+      setRecommendedSitters([]);
+      return;
+    }
+
+    setLoadingSitters(true);
+    try {
+      const nearbySitters = await realtimeLocationService.getSittersNearby(
+        currentLocation.coords.latitude,
+        currentLocation.coords.longitude,
+        5, // 5km radius for recommendations
+        false
+      );
+
+      // Get top 3-5 recommendations (closest sitters)
+      const recommendations = nearbySitters.slice(0, 5);
+      setRecommendedSitters(recommendations);
+      console.log('✅ Loaded recommended sitters:', recommendations.length);
+      // Log ratings for debugging
+      recommendations.forEach((sitter, idx) => {
+        console.log(`⭐ Sitter ${idx + 1} (${sitter.name}): rating = ${sitter.rating}`);
+      });
+    } catch (error) {
+      console.error('❌ Error loading recommended sitters:', error);
+      setRecommendedSitters([]);
+    } finally {
+      setLoadingSitters(false);
+    }
+  };
+
+  // Handle sitter card press - navigate to map with sitter location
+  const handleSitterCardPress = async (sitter: any) => {
+    try {
+      console.log('🔍 Sitter card pressed:', {
+        id: sitter?.id,
+        name: sitter?.name,
+        hasLocation: !!sitter?.location,
+        location: sitter?.location,
+      });
+
+      // Validate sitter data
+      if (!sitter || !sitter.id) {
+        console.error('❌ Invalid sitter data:', sitter);
+        Alert.alert('Error', 'Invalid sitter information. Please try again.');
+        return;
+      }
+
+      // Ensure sitter ID is converted to string for consistent storage
+      const sitterId = typeof sitter.id === 'string' ? sitter.id : String(sitter.id);
+
+      // Check if location data exists
+      if (sitter.location && sitter.location.latitude && sitter.location.longitude) {
+        // Store sitter location in AsyncStorage for map screen to use
+        const locationData = {
+          latitude: Number(sitter.location.latitude),
+          longitude: Number(sitter.location.longitude),
+          sitterId: sitterId, // Store as string
+          address: sitter.location.address || 'Location not available',
+        };
+        
+        console.log('📍 Storing sitter location:', locationData);
+        await AsyncStorage.setItem('selected_sitter_location', JSON.stringify(locationData));
+      } else {
+        console.warn('⚠️ Sitter location data missing, storing sitter ID only');
+        // Store just the sitter ID if location is not available
+        await AsyncStorage.setItem('selected_sitter_location', JSON.stringify({
+          sitterId: sitterId, // Store as string
+          address: sitter.location?.address || 'Location not available',
+        }));
+      }
+      
+      // Navigate to map screen
+      console.log('🧭 Navigating to map screen...');
+      router.push('/find-sitter-map');
+    } catch (error) {
+      console.error('❌ Error navigating to sitter location:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        sitter: sitter,
+      });
+      
+      // Show user-friendly error message
+      Alert.alert(
+        'Navigation Error',
+        'Unable to navigate to sitter location. Please try again.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Fallback: just navigate to map without location
+              router.push('/find-sitter-map');
+            },
+          },
+        ]
+      );
+    }
+  };
+
   // Handle pull to refresh
   const onRefresh = useCallback(async () => {
     console.log('🔄 Pull to refresh triggered');
@@ -163,6 +269,7 @@ const PetOwnerDashboard = () => {
     try {
       // Refresh dashboard data
       await loadDashboardData();
+      await loadRecommendedSitters();
       
       // Force refresh notifications from API
       await notificationService.forceRefreshFromAPI();
@@ -192,7 +299,7 @@ const PetOwnerDashboard = () => {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [currentLocation]);
 
   // Load dashboard data
   const loadDashboardData = async () => {
@@ -767,6 +874,166 @@ const PetOwnerDashboard = () => {
             </View>
           )}
         </ScrollView>
+
+        {/* Pet Sitter Recommendations */}
+        <View style={[styles.sectionRowAligned, styles.recommendationsSectionSpacing]}>
+          <Text style={styles.sectionTitle}>Pet Sitter Recommendations</Text>
+        </View>
+        {loadingSitters ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#10B981" />
+            <Text style={styles.loadingText}>Loading recommendations...</Text>
+          </View>
+        ) : recommendedSitters.length > 0 ? (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            contentContainerStyle={styles.recommendationsRow}
+          >
+            {recommendedSitters.map((sitter, idx) => {
+              // Safety check - skip invalid sitters
+              if (!sitter || !sitter.id) {
+                console.warn('⚠️ Skipping invalid sitter:', sitter);
+                return null;
+              }
+
+              const cardColors = [
+                { gradient: ['#A7F3D0', '#D1FAE5'], accent: '#10B981' },
+                { gradient: ['#DDD6FE', '#EDE9FE'], accent: '#8B5CF6' },
+                { gradient: ['#FDE68A', '#FEF3C7'], accent: '#F59E0B' },
+                { gradient: ['#BAE6FD', '#DBEAFE'], accent: '#3B82F6' },
+                { gradient: ['#FBCFE8', '#FCE7F3'], accent: '#EC4899' },
+              ];
+              const cardColor = cardColors[idx % cardColors.length];
+              
+              return (
+                <TouchableOpacity
+                  key={sitter.id || `sitter-${idx}`}
+                  style={[styles.sitterCard, { borderLeftColor: cardColor.accent }]}
+                  onPress={() => {
+                    try {
+                      handleSitterCardPress(sitter);
+                    } catch (error) {
+                      console.error('❌ Error in card press handler:', error);
+                      Alert.alert('Error', 'Unable to open sitter profile. Please try again.');
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={cardColor.gradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.sitterCardGradient}
+                  >
+                    <View style={styles.sitterCardContent}>
+                      <View style={styles.sitterCardHeader}>
+                        <View style={styles.sitterAvatarContainer}>
+                          {sitter?.profileImage || sitter?.imageSource ? (
+                            <Image
+                              source={{ uri: sitter.profileImage || sitter.imageSource }}
+                              style={styles.sitterAvatar}
+                              onError={(error) => {
+                                console.log('❌ Image load error for sitter:', sitter?.name);
+                              }}
+                            />
+                          ) : (
+                            <View style={styles.sitterAvatarPlaceholder}>
+                              <Ionicons name="person" size={28} color="#9CA3AF" />
+                            </View>
+                          )}
+                          {sitter?.isOnline && (
+                            <View style={[styles.onlineIndicator, { backgroundColor: cardColor.accent }]} />
+                          )}
+                        </View>
+                        <View style={styles.sitterCardInfo}>
+                          <Text style={styles.sitterCardName} numberOfLines={1}>
+                            {sitter?.name || 'Pet Sitter'}
+                          </Text>
+                          <View style={styles.sitterCardBadgeRow}>
+                            <View style={[styles.sitterCardBadge, { backgroundColor: '#FFF' }]}>
+                              <Ionicons name="star" size={14} color="#F59E0B" />
+                              <Text style={styles.sitterCardRating}>
+                                {sitter?.rating !== undefined && sitter?.rating !== null 
+                                  ? Number(sitter.rating).toFixed(1) 
+                                  : 'N/A'}
+                              </Text>
+                            </View>
+                            {sitter?.petTypes && Array.isArray(sitter.petTypes) && sitter.petTypes.length > 0 && (
+                              <View style={styles.petTypesContainer}>
+                                {sitter.petTypes.slice(0, 2).map((type: string, i: number) => (
+                                  <View key={i} style={styles.petTypeBadge}>
+                                    <Ionicons 
+                                      name={type === 'dogs' ? 'paw' : type === 'cats' ? 'paw-outline' : 'paw'} 
+                                      size={10} 
+                                      color={cardColor.accent} 
+                                    />
+                                  </View>
+                                ))}
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.sitterCardDetails}>
+                        <View style={styles.sitterCardDetailRow}>
+                          <View style={[styles.iconContainer, { backgroundColor: '#FFF' }]}>
+                            <Ionicons name="location" size={14} color={cardColor.accent} />
+                          </View>
+                          <Text style={styles.sitterCardLocation} numberOfLines={1}>
+                            {sitter?.location?.address || sitter?.address || 'Location not available'}
+                          </Text>
+                        </View>
+                        <View style={styles.sitterCardDetailRow}>
+                          {sitter?.distance && (
+                            <>
+                              <View style={[styles.iconContainer, { backgroundColor: '#FFF' }]}>
+                                <Ionicons name="walk" size={14} color={cardColor.accent} />
+                              </View>
+                              <Text style={styles.sitterCardDistance}>
+                                {sitter.distance} away
+                              </Text>
+                            </>
+                          )}
+                          <View style={[styles.iconContainer, { backgroundColor: '#FFF', marginLeft: sitter?.distance ? 8 : 0 }]}>
+                            <Ionicons name="time" size={14} color={cardColor.accent} />
+                          </View>
+                          <Text style={styles.sitterCardExperience}>
+                            {sitter?.experience || '1+ years'} exp
+                          </Text>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.sitterCardFooter}>
+                        <View>
+                          <Text style={styles.sitterCardRateLabel}>Starting at</Text>
+                          <Text style={[styles.sitterCardRate, { color: cardColor.accent }]}>
+                            ₱{sitter?.hourlyRate || '25'}/hr
+                          </Text>
+                        </View>
+                        <View style={[styles.viewButton, { backgroundColor: cardColor.accent }]}>
+                          <Text style={styles.viewButtonText}>View</Text>
+                          <Ionicons name="arrow-forward" size={14} color="#FFF" />
+                        </View>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <View style={styles.noRecommendationsContainer}>
+            <Ionicons name="paw-outline" size={32} color="#D1D5DB" />
+            <Text style={styles.noRecommendationsText}>
+              {currentLocation 
+                ? 'No pet sitters available nearby'
+                : 'Enable location to see recommendations'
+              }
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -978,6 +1245,207 @@ const styles = StyleSheet.create({
     elevation: 4,
     minHeight: 120,
   },
+  recommendationsRow: {
+    flexDirection: 'row',
+    paddingLeft: 16,
+    paddingRight: 8,
+    gap: 12,
+    paddingBottom: 8,
+  },
+  sitterCard: {
+    width: 280,
+    borderRadius: 20,
+    marginRight: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+    borderLeftWidth: 4,
+    overflow: 'hidden',
+  },
+  sitterCardGradient: {
+    borderRadius: 20,
+    padding: 2,
+  },
+  sitterCardContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 18,
+    padding: 16,
+  },
+  sitterCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  sitterAvatarContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  sitterAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 3,
+    borderColor: '#FFF',
+  },
+  sitterAvatarPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFF',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#FFF',
+  },
+  sitterCardInfo: {
+    flex: 1,
+    paddingTop: 4,
+  },
+  sitterCardName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  sitterCardBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sitterCardBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  sitterCardRating: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+    marginLeft: 4,
+  },
+  petTypesContainer: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  petTypeBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sitterCardDetails: {
+    marginBottom: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  sitterCardDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  iconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  sitterCardLocation: {
+    fontSize: 13,
+    color: '#4B5563',
+    flex: 1,
+    fontWeight: '500',
+  },
+  sitterCardDistance: {
+    fontSize: 13,
+    color: '#4B5563',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  sitterCardExperience: {
+    fontSize: 13,
+    color: '#4B5563',
+    fontWeight: '600',
+  },
+  sitterCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  sitterCardRateLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  sitterCardRate: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  viewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
+  },
+  viewButtonText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  noRecommendationsContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noRecommendationsText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    elevation: 4,
+    minHeight: 120,
+  },
   sectionRowAligned: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -985,6 +1453,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 0,
     marginBottom: 16,
+  },
+  recommendationsSectionSpacing: {
+    marginTop: 24,
   },
   profileButton: {
     borderRadius: 14,

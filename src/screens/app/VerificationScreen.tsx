@@ -229,7 +229,15 @@ const VerificationScreen = () => {
   };
 
   const verifyPhone = async () => {
-    if (!phoneCode || phoneCode.length !== 6) {
+    if (!phoneCode) {
+      Alert.alert('Error', 'Please enter a verification code');
+      return;
+    }
+
+    // Normalize the code: trim whitespace and remove any non-digit characters
+    const normalizedCode = phoneCode.trim().replace(/[^0-9]/g, '');
+    
+    if (normalizedCode.length !== 6) {
       Alert.alert('Error', 'Please enter a valid 6-digit code');
       return;
     }
@@ -247,7 +255,7 @@ const VerificationScreen = () => {
         },
         body: JSON.stringify({
           phone: user?.phone,
-          code: phoneCode,
+          code: normalizedCode,
         }),
       });
 

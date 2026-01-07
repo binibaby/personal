@@ -81,6 +81,38 @@ const FindSitterMapScreen = () => {
 
       // User is authenticated, initialize
       setSitters([]);
+      
+      // Check if there's a selected sitter location from dashboard recommendations
+      const selectedSitterLocation = await AsyncStorage.getItem('selected_sitter_location');
+      if (selectedSitterLocation) {
+        try {
+          const locationData = JSON.parse(selectedSitterLocation);
+          console.log('📍 Found selected sitter location:', locationData);
+          
+          // Set map region to the selected sitter's location
+          if (locationData.latitude && locationData.longitude) {
+            const region: Region = {
+              latitude: locationData.latitude,
+              longitude: locationData.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            };
+            setUserRegion(region);
+            
+            // Clear the stored location after using it
+            await AsyncStorage.removeItem('selected_sitter_location');
+            
+            // If there's a sitter ID, try to select that sitter when sitters are loaded
+            if (locationData.sitterId) {
+              // Store sitter ID to select after sitters load (must be string)
+              await AsyncStorage.setItem('pending_sitter_selection', String(locationData.sitterId));
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing selected sitter location:', error);
+          await AsyncStorage.removeItem('selected_sitter_location');
+        }
+      }
     } catch (error) {
       console.error('Error checking authentication:', error);
       router.replace('/onboarding');
@@ -348,8 +380,28 @@ const FindSitterMapScreen = () => {
         setSitters(nearbySitters);
         console.log('📍 Found nearby sitters from API:', nearbySitters.length);
         
+        // Check if there's a pending sitter selection from dashboard
+        const pendingSitterId = await AsyncStorage.getItem('pending_sitter_selection');
+        if (pendingSitterId) {
+          // Convert to number for comparison (sitter.id might be number or string)
+          const sitterIdNum = Number(pendingSitterId);
+          const sitterToSelect = nearbySitters.find(s => {
+            const sitterId = typeof s.id === 'string' ? Number(s.id) : s.id;
+            return sitterId === sitterIdNum || String(s.id) === pendingSitterId;
+          });
+          if (sitterToSelect) {
+            console.log('📍 Selecting sitter from dashboard recommendation:', sitterToSelect.name);
+            setSelectedSitter(sitterToSelect);
+            setShowProfilePopup(true);
+            await AsyncStorage.removeItem('pending_sitter_selection');
+          } else {
+            console.warn('⚠️ Sitter not found for pending selection:', pendingSitterId);
+            await AsyncStorage.removeItem('pending_sitter_selection');
+          }
+        }
+        
         // Update selectedSitter if it exists and we have updated data
-        if (selectedSitter) {
+        if (selectedSitter && !pendingSitterId) {
           const updatedSitter = nearbySitters.find(s => s.id === selectedSitter.id);
           if (updatedSitter) {
             console.log('🔄 Updating selectedSitter with fresh data:', updatedSitter.name);
@@ -529,6 +581,10 @@ const FindSitterMapScreen = () => {
 
   // Compute a sensible initial region around the first sitter or user location
   const initialRegion: Region = useMemo(() => {
+    // Use userRegion if set (e.g., from dashboard recommendation)
+    if (userRegion) {
+      return userRegion;
+    }
     if (currentLocation) {
       return {
         latitude: currentLocation.coords.latitude,
@@ -553,7 +609,7 @@ const FindSitterMapScreen = () => {
       latitudeDelta: 0.02,
       longitudeDelta: 0.02,
     };
-  }, [currentLocation, filteredSitters]);
+  }, [userRegion, currentLocation, filteredSitters]);
 
   const [userRegion, setUserRegion] = useState<Region | null>(null);
   const mapRef = useRef<any>(null);

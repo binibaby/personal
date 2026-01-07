@@ -521,6 +521,13 @@ const SitterProfilePopup: React.FC<SitterProfilePopupProps> = ({
                 <Text style={styles.infoValue}>{sitter.experience}</Text>
               </View>
 
+              {/* Max Pets */}
+              <View style={styles.infoRow}>
+                <Ionicons name="paw" size={16} color="#F59E0B" />
+                <Text style={styles.infoLabel}>Max Pets:</Text>
+                <Text style={styles.infoValue}>{sitter.maxPets || sitter.max_pets || '10'}</Text>
+              </View>
+
               {/* Specialties */}
               <View style={styles.infoRow}>
                 <Ionicons name="star" size={16} color="#F59E0B" />

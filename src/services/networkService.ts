@@ -1,4 +1,4 @@
-import { NETWORK_FALLBACK, API_BASE_URL } from '../constants/config';
+import { API_BASE_URL, NETWORK_FALLBACK } from '../constants/config';
 
 // Module-level flag to prevent multiple suspension popups
 let isHandlingSuspension: boolean = false;
@@ -84,7 +84,7 @@ export class NetworkService {
 
     // Try the most likely IPs first (prioritize current WiFi)
     const priorityIPs = [
-      '192.168.100.239',  // Current WiFi IP (primary)
+      '192.168.100.13',  // Current WiFi IP (primary)
       '192.168.100.225',  // Previous WiFi IP (fallback)
       '192.168.100.226',  // Previous WiFi IP (fallback)
       '172.20.10.2',      // Mobile data IP (fallback)
@@ -143,7 +143,7 @@ export class NetworkService {
     }
 
     // If all fail, use the current WiFi IP as default but mark as disconnected
-    this.currentBaseUrl = `http://192.168.100.239:8000`;
+    this.currentBaseUrl = `http://192.168.100.13`;
     this.isConnected = false;
     // Silently use default
     // console.log(`⚠️ All IPs failed. Using current WiFi IP as default: ${this.currentBaseUrl}`);
@@ -171,9 +171,9 @@ export class NetworkService {
     if (!__DEV__) {
       return API_BASE_URL;
     }
-    // If currentBaseUrl is empty, use the default from config (192.168.100.239)
+    // If currentBaseUrl is empty, use the default from config (192.168.100.13)
     if (!this.currentBaseUrl) {
-      this.currentBaseUrl = 'http://192.168.100.239:8000';
+      this.currentBaseUrl = 'http://192.168.100.13';
     }
     return this.currentBaseUrl;
   }
@@ -601,6 +601,7 @@ export const submitProfileUpdateRequest = async (data: {
   phone: string;
   hourlyRate: string;
   experience: string;
+  maxPets?: string;
   reason: string;
 }, token: string, userRole?: string) => {
   try {
@@ -629,6 +630,14 @@ export const submitProfileUpdateRequest = async (data: {
         requestBody.experience = isNaN(experienceNum) ? null : experienceNum;
       } else {
         requestBody.experience = null;
+      }
+      
+      // Include max_pets for pet sitters
+      if (data.maxPets && data.maxPets.trim() !== '') {
+        const maxPetsNum = parseInt(data.maxPets.trim());
+        requestBody.max_pets = isNaN(maxPetsNum) ? null : maxPetsNum;
+      } else {
+        requestBody.max_pets = null;
       }
     }
     

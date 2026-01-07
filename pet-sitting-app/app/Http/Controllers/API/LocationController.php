@@ -193,6 +193,10 @@ class LocationController extends Controller
                 $verificationStatus = $verification ? $verification->verification_status : 'pending';
                 $isLegitSitter = $verification ? $verification->is_legit_sitter : false;
 
+                // Get actual rating from database (same as popup uses)
+                $actualRating = $user ? $user->getAverageRating() : ($sitterData['rating'] ?? 0);
+                $actualReviews = $user ? $user->reviews()->count() : ($sitterData['reviews'] ?? 0);
+
                 // Use database data if available, otherwise fallback to cached data
                 $sitterInfo = $user ? [
                     'id' => $sitterData['user_id'],
@@ -209,8 +213,9 @@ class LocationController extends Controller
                     'petTypes' => $user->selected_pet_types ?: $sitterData['pet_types'],
                     'selectedBreeds' => ($user->pet_breeds && count($user->pet_breeds) > 0) ? $this->formatBreedNames($user->pet_breeds) : $this->formatBreedNames($sitterData['selected_breeds']),
                     'hourlyRate' => $user->hourly_rate ?: $sitterData['hourly_rate'],
-                    'rating' => $sitterData['rating'],
-                    'reviews' => $sitterData['reviews'],
+                    'maxPets' => $user->max_pets ?? $sitterData['max_pets'] ?? 10,
+                    'rating' => $actualRating, // Use actual rating from database
+                    'reviews' => $actualReviews, // Use actual review count from database
                     'bio' => $user->bio ?: $sitterData['bio'],
                     'isOnline' => $sitterData['is_online'],
                     'lastSeen' => $sitterData['last_seen'],
@@ -244,8 +249,9 @@ class LocationController extends Controller
                     'petTypes' => $sitterData['pet_types'],
                     'selectedBreeds' => ($sitterData['selected_breeds'] && count($sitterData['selected_breeds']) > 0) ? $this->formatBreedNames($sitterData['selected_breeds']) : ['All breeds welcome'],
                     'hourlyRate' => $sitterData['hourly_rate'],
-                    'rating' => $sitterData['rating'],
-                    'reviews' => $sitterData['reviews'],
+                    'maxPets' => $sitterData['max_pets'] ?? 10,
+                    'rating' => $sitterData['rating'] ?? 0, // Fallback to cached rating if available
+                    'reviews' => $sitterData['reviews'] ?? 0, // Fallback to cached review count if available
                     'bio' => $sitterData['bio'],
                     'isOnline' => $sitterData['is_online'],
                     'lastSeen' => $sitterData['last_seen'],

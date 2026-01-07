@@ -552,6 +552,11 @@ function getRequestedChanges(request) {
         const newExp = request.experience ? `${request.experience} years` : 'Not set';
         changes.push(`Years of Experience: "${oldExp}" → "${newExp}"`);
     }
+    if (request.max_pets != request.old_max_pets) {
+        const oldMaxPets = request.old_max_pets !== null && request.old_max_pets !== undefined ? `${request.old_max_pets}` : '10';
+        const newMaxPets = request.max_pets !== null && request.max_pets !== undefined ? `${request.max_pets}` : 'Not set';
+        changes.push(`Max Pets: "${oldMaxPets}" → "${newMaxPets}"`);
+    }
     
     return changes.length > 0 ? changes.join('<br>') : 'No changes';
 }
@@ -724,6 +729,21 @@ function getDetailedChanges(request) {
                     <span class="text-red-600">${oldExp}</span>
                     <span class="mx-2">→</span>
                     <span class="text-green-600">${newExp}</span>
+                </div>
+            </div>
+        `);
+    }
+    
+    if (request.max_pets != request.old_max_pets) {
+        const oldMaxPets = request.old_max_pets !== null && request.old_max_pets !== undefined ? `${request.old_max_pets}` : '10';
+        const newMaxPets = request.max_pets !== null && request.max_pets !== undefined ? `${request.max_pets}` : 'Not set';
+        changes.push(`
+            <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                <span class="text-sm font-medium text-gray-500">Max Pets:</span>
+                <div class="text-sm text-gray-900">
+                    <span class="text-red-600">${oldMaxPets}</span>
+                    <span class="mx-2">→</span>
+                    <span class="text-green-600">${newMaxPets}</span>
                 </div>
             </div>
         `);

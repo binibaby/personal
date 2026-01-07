@@ -37,6 +37,7 @@ class ProfileUpdateRequestController extends Controller
             'phone' => 'sometimes|string|max:20',
             'hourly_rate' => 'sometimes|numeric|min:0|max:9999999.99',
             'experience' => 'sometimes|numeric|min:0|max:100',
+            'max_pets' => 'sometimes|integer|min:1|max:10',
             'reason' => 'required|string|max:1000',
         ]);
 
@@ -124,6 +125,18 @@ class ProfileUpdateRequestController extends Controller
                 }
             }
 
+            // Check max_pets change
+            if ($request->has('max_pets') && $request->max_pets !== null) {
+                // Get current max_pets, defaulting to 10 if null
+                $currentMaxPets = $user->max_pets ?? 10;
+                $newMaxPets = (int)$request->max_pets;
+                if ($newMaxPets != $currentMaxPets) {
+                    $updatedFields[] = 'max_pets';
+                    $oldValues['max_pets'] = $currentMaxPets;
+                    $newValues['max_pets'] = $newMaxPets;
+                }
+            }
+
             if (empty($updatedFields)) {
                 return response()->json([
                     'success' => false,
@@ -131,20 +144,36 @@ class ProfileUpdateRequestController extends Controller
                 ], 400);
             }
 
+            // Determine field_name - use 'multiple' if there are multiple fields or if it's max_pets/experience
+            // (since these aren't in the enum constraint)
+            $allowedFieldNames = ['name', 'first_name', 'last_name', 'address', 'phone', 'hourly_rate'];
+            $fieldName = 'multiple';
+            if (count($updatedFields) === 1) {
+                $singleField = $updatedFields[0];
+                if (in_array($singleField, $allowedFieldNames)) {
+                    $fieldName = $singleField;
+                } else {
+                    // For max_pets, experience, or other fields not in enum, use 'multiple'
+                    $fieldName = 'multiple';
+                }
+            }
+
             // Create the profile change request
             $profileRequest = ProfileChangeRequest::create([
                 'user_id' => $user->id,
-                'field_name' => count($updatedFields) > 1 ? 'multiple' : $updatedFields[0],
+                'field_name' => $fieldName,
                 'first_name' => $request->first_name ?? $user->first_name,
                 'last_name' => $request->last_name ?? $user->last_name,
                 'phone' => $request->phone ?? $user->phone,
                 'hourly_rate' => $request->hourly_rate ?? $user->hourly_rate,
                 'experience' => $request->has('experience') ? ($newExperience !== null ? $newExperience : null) : ($user->experience ?: null),
+                'max_pets' => $request->has('max_pets') ? ($request->max_pets !== null ? (int)$request->max_pets : null) : ($user->max_pets ?? null),
                 'old_first_name' => $oldValues['first_name'] ?? $user->first_name,
                 'old_last_name' => $oldValues['last_name'] ?? $user->last_name,
                 'old_phone' => $oldValues['phone'] ?? $user->phone,
                 'old_hourly_rate' => $oldValues['hourly_rate'] ?? $user->hourly_rate,
                 'old_experience' => $oldValues['experience'] ?? ($user->experience ?: null),
+                'old_max_pets' => $oldValues['max_pets'] ?? ($user->max_pets ?? 10),
                 'old_value' => json_encode($oldValues),
                 'new_value' => json_encode($newValues),
                 'reason' => $request->reason,

@@ -53,6 +53,7 @@ const SignUpScreen4_FinalSteps: React.FC<SignUpScreen4_FinalStepsProps> = ({
   const [address, setAddress] = useState('');
   const [experience, setExperience] = useState('');
   const [hourlyRate, setHourlyRate] = useState('');
+  const [maxPets, setMaxPets] = useState('');
   const [specialties, setSpecialties] = useState<string[]>([]);
   const [newSpecialty, setNewSpecialty] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -103,9 +104,15 @@ const SignUpScreen4_FinalSteps: React.FC<SignUpScreen4_FinalStepsProps> = ({
            password === confirmPassword &&
            password.length >= 8;
     
-    // For pet sitters, also require experience and hourlyRate
+    // For pet sitters, also require experience, hourlyRate, and maxPets
     if (userRole === 'Pet Sitter') {
-      return baseValidation && experience.trim() && hourlyRate.trim();
+      const maxPetsNum = parseInt(maxPets);
+      return baseValidation && 
+             experience.trim() && 
+             hourlyRate.trim() && 
+             maxPets.trim() && 
+             maxPetsNum >= 1 && 
+             maxPetsNum <= 10;
     }
     
     return baseValidation;
@@ -157,6 +164,7 @@ const SignUpScreen4_FinalSteps: React.FC<SignUpScreen4_FinalStepsProps> = ({
         selectedBreeds,
         experience: userRole === 'Pet Sitter' ? experience : '',
         hourlyRate: userRole === 'Pet Sitter' ? hourlyRate : '',
+        maxPets: userRole === 'Pet Sitter' ? parseInt(maxPets) || 10 : null,
         specialties: userRole === 'Pet Sitter' ? specialties : [],
         aboutMe: '',
         isVerified: false,
@@ -395,6 +403,29 @@ const SignUpScreen4_FinalSteps: React.FC<SignUpScreen4_FinalStepsProps> = ({
                   />
                   {userRole === 'Pet Sitter' && hourlyRate.length === 0 && (
                     <Text style={styles.errorText}>Hourly rate is required for pet sitters</Text>
+                  )}
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Maximum Pets *</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g., 1, 5, 10"
+                    placeholderTextColor="#999"
+                    value={maxPets}
+                    onChangeText={(text) => {
+                      // Only allow numbers 1-10
+                      const num = parseInt(text);
+                      if (text === '' || (num >= 1 && num <= 10)) {
+                        setMaxPets(text);
+                      }
+                    }}
+                    keyboardType="numeric"
+                    maxLength={2}
+                  />
+                  <Text style={styles.helperText}>Maximum number of pets you can care for at once (1-10)</Text>
+                  {userRole === 'Pet Sitter' && (!maxPets || parseInt(maxPets) < 1 || parseInt(maxPets) > 10) && (
+                    <Text style={styles.errorText}>Please enter a number between 1 and 10</Text>
                   )}
                 </View>
 
@@ -800,6 +831,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 5,
     fontWeight: '500',
+  },
+  helperText: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   successText: {
     color: '#4CAF50',

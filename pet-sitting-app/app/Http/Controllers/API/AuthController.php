@@ -32,6 +32,7 @@ class AuthController extends Controller
                 'age' => 'nullable|integer|min:1|max:120',
                 'experience' => 'nullable|string|max:500',
                 'hourly_rate' => 'nullable|numeric|min:0|max:999999.99',
+                'max_pets' => 'nullable|integer|min:1|max:10',
                 'pet_breeds' => 'nullable|array',
                 'specialties' => 'nullable|array',
                 'selected_pet_types' => 'nullable|array',
@@ -95,6 +96,9 @@ class AuthController extends Controller
             }
             if (Schema::hasColumn('users', 'hourly_rate')) {
                 $userData['hourly_rate'] = $request->hourly_rate;
+            }
+            if (Schema::hasColumn('users', 'max_pets')) {
+                $userData['max_pets'] = $request->max_pets ?? $request->maxPets ?? 10; // Default to 10 if not provided
             }
             if (Schema::hasColumn('users', 'pet_breeds')) {
                 $userData['pet_breeds'] = $request->pet_breeds;
@@ -614,6 +618,7 @@ class AuthController extends Controller
             // Pet sitter specific fields
             $profile['experience'] = $user->experience;
             $profile['hourly_rate'] = $user->hourly_rate;
+            $profile['max_pets'] = $user->max_pets;
             $profile['specialties'] = $user->specialties;
             $profile['selected_pet_types'] = $user->selected_pet_types;
             $profile['pet_breeds'] = $this->formatBreedNames($user->pet_breeds);
@@ -713,11 +718,16 @@ class AuthController extends Controller
             'phone' => ['required', 'string', 'max:20', 'regex:/^(\+63|63|0)?[0-9]{10}$/'],
         ]);
 
+        $rawPhone = $request->phone;
         $phone = $this->formatPhoneNumber($request->phone);
+        
+        \Log::info("📱 SEND SMS - Raw phone received: '{$rawPhone}'");
+        \Log::info("📱 SEND SMS - Formatted phone: '{$phone}'");
         
         // Verify the phone number matches the user's registered phone
         $user = $request->user();
         if ($user && $user->phone !== $phone) {
+            \Log::warning("📱 SEND SMS - Phone mismatch. User phone: '{$user->phone}', Requested phone: '{$phone}'");
             return response()->json([
                 'success' => false,
                 'message' => 'Phone number does not match your registered phone number.',
@@ -741,14 +751,65 @@ class AuthController extends Controller
             
         $timestamp = now()->format('Y-m-d H:i:s');
 
-        // Generate a 6-digit verification code
-        $verificationCode = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        // Generate a 6-digit verification code (ensure it's a string)
+        $verificationCode = (string) str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         
-        // Create cache key with original phone number
-        $cacheKey = "phone_verification_{$phone}";
+        // Store code with MULTIPLE cache keys to handle phone format variations
+        // This ensures the code can be found regardless of how the phone number is formatted when verifying
+        $cacheKeys = [
+            "phone_verification_{$phone}", // Primary: formatted phone
+            "phone_verification_{$rawPhone}", // Secondary: raw phone from request
+        ];
         
-        // Store the code in cache for verification (expires in 10 minutes)
-        \Cache::put($cacheKey, $verificationCode, 600);
+        // Add alternative phone formats
+        if (str_starts_with($phone, '+63')) {
+            $altFormats = [
+                '0' . substr($phone, 3), // 0XXXXXXXXXX
+                '63' . substr($phone, 3), // 63XXXXXXXXXX
+                substr($phone, 3), // XXXXXXXXXX (without country code)
+            ];
+            foreach ($altFormats as $altFormat) {
+                $cacheKeys[] = "phone_verification_{$altFormat}";
+            }
+        } elseif (str_starts_with($phone, '63')) {
+            $cacheKeys[] = "phone_verification_+" . $phone; // +63XXXXXXXXXX
+            $cacheKeys[] = "phone_verification_0" . substr($phone, 2); // 0XXXXXXXXXX
+            $cacheKeys[] = "phone_verification_" . substr($phone, 2); // XXXXXXXXXX
+        } elseif (str_starts_with($phone, '0')) {
+            $cacheKeys[] = "phone_verification_+63" . substr($phone, 1); // +63XXXXXXXXXX
+            $cacheKeys[] = "phone_verification_63" . substr($phone, 1); // 63XXXXXXXXXX
+            $cacheKeys[] = "phone_verification_" . substr($phone, 1); // XXXXXXXXXX
+        }
+        
+        // Remove duplicates
+        $cacheKeys = array_unique($cacheKeys);
+        
+        \Log::info("📱 SEND SMS - Generated code: '{$verificationCode}'");
+        \Log::info("📱 SEND SMS - Generated code type: " . gettype($verificationCode));
+        \Log::info("📱 SEND SMS - Phone formats to store: " . implode(', ', $cacheKeys));
+        \Log::info("📱 SEND SMS - Code will expire in 10 minutes");
+        
+        // Store the code in ALL possible cache keys (expires in 10 minutes)
+        $storedCount = 0;
+        foreach ($cacheKeys as $cacheKey) {
+            \Cache::put($cacheKey, (string) $verificationCode, 600);
+            $storedCount++;
+            \Log::info("📱 SEND SMS - Stored code in cache key: '{$cacheKey}'");
+        }
+        
+        \Log::info("✅ SEND SMS - Code stored in {$storedCount} cache keys for phone format variations");
+        
+        // Verify the code was stored correctly (check primary key)
+        $primaryCacheKey = "phone_verification_{$phone}";
+        $storedCheck = \Cache::get($primaryCacheKey);
+        \Log::info("📱 SEND SMS - Verification: Code stored in primary cache key: " . ($storedCheck ? "YES" : "NO"));
+        \Log::info("📱 SEND SMS - Stored check value: '{$storedCheck}'");
+        \Log::info("📱 SEND SMS - Stored check type: " . gettype($storedCheck));
+        if ($storedCheck != $verificationCode) {
+            \Log::error("❌ SEND SMS - Cache storage mismatch! Expected: '{$verificationCode}' (" . gettype($verificationCode) . "), Got: '{$storedCheck}' (" . gettype($storedCheck) . ")");
+        } else {
+            \Log::info("✅ SEND SMS - Code stored successfully and verified in primary cache key");
+        }
 
         // Format phone number for display
         $formattedPhone = $this->formatPhoneForSMS($phone);
@@ -800,6 +861,7 @@ class AuthController extends Controller
 
     public function verifyPhoneCode(Request $request)
     {
+        try {
         // Add CORS headers
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
@@ -813,11 +875,20 @@ class AuthController extends Controller
         
         $request->validate([
             'phone' => ['required', 'string', 'max:20', 'regex:/^(\+63|63|0)?[0-9]{10}$/'],
-            'code' => 'required|string|size:6',
+            'code' => 'required|string|min:4|max:10', // Allow flexible code length for normalization
         ]);
 
+        $rawPhone = $request->phone;
         $phone = $this->formatPhoneNumber($request->phone);
-        $code = $request->code;
+        // Normalize the code: trim whitespace and remove any non-digit characters
+        $rawCode = $request->code;
+        $code = trim($request->code);
+        $code = preg_replace('/[^0-9]/', '', $code); // Remove any non-digit characters
+        
+        \Log::info("📱 VERIFY SMS - Raw phone received: '{$rawPhone}'");
+        \Log::info("📱 VERIFY SMS - Formatted phone: '{$phone}'");
+        \Log::info("📱 VERIFY SMS - Raw code received: '{$rawCode}'");
+        \Log::info("📱 VERIFY SMS - Normalized code: '{$code}'");
         
         // Check if user is authenticated (for logged-in users) or find user by phone (for registration)
         $user = $request->user();
@@ -853,21 +924,76 @@ class AuthController extends Controller
         // Enhanced logging for phone verification simulation
         \Log::info("🔔 PHONE VERIFICATION CODE VERIFICATION STARTED");
         \Log::info("📱 VERIFY SMS - Received verification request for phone: {$phone}");
-        \Log::info("📱 VERIFY SMS - Received code: {$code}");
+        \Log::info("📱 VERIFY SMS - Received code (raw): '{$request->code}'");
+        \Log::info("📱 VERIFY SMS - Received code (normalized): '{$code}'");
         \Log::info("⏰ Timestamp: " . $timestamp);
         \Log::info("🌐 Request IP: " . $request->ip());
         \Log::info("👤 User Agent: " . $request->userAgent());
 
-        // Get the stored verification code using the same cache key format
-        $cacheKey = "phone_verification_{$phone}";
-        $storedCode = \Cache::get($cacheKey);
+        // Try multiple cache key formats to handle phone number format variations
+        $possibleCacheKeys = [
+            "phone_verification_{$phone}",
+            "phone_verification_{$rawPhone}",
+        ];
         
-        \Log::info("📱 VERIFY SMS - Cache key used: {$cacheKey}");
-        \Log::info("📱 VERIFY SMS - Stored code found: " . ($storedCode ? $storedCode : 'NULL'));
+        // Also try with different phone formats
+        $altPhoneFormats = [];
+        if (str_starts_with($phone, '+63')) {
+            $altPhoneFormats[] = '0' . substr($phone, 3);
+            $altPhoneFormats[] = '63' . substr($phone, 3);
+            $altPhoneFormats[] = substr($phone, 3);
+        } elseif (str_starts_with($phone, '63')) {
+            $altPhoneFormats[] = '+63' . substr($phone, 2);
+            $altPhoneFormats[] = '0' . substr($phone, 2);
+        } elseif (str_starts_with($phone, '0')) {
+            $altPhoneFormats[] = '+63' . substr($phone, 1);
+            $altPhoneFormats[] = '63' . substr($phone, 1);
+        }
+        
+        foreach ($altPhoneFormats as $altPhone) {
+            $possibleCacheKeys[] = "phone_verification_{$altPhone}";
+        }
+        
+        $storedCode = null;
+        $usedCacheKey = null;
+        
+        // Try each possible cache key
+        foreach ($possibleCacheKeys as $cacheKey) {
+            $testCode = \Cache::get($cacheKey);
+            if ($testCode) {
+                $storedCode = $testCode;
+                $usedCacheKey = $cacheKey;
+                \Log::info("📱 VERIFY SMS - Found code using cache key: '{$cacheKey}'");
+                break;
+            }
+        }
+        
+        // Normalize stored code (convert to string, trim, remove non-digits)
+        if ($storedCode !== null) {
+            $storedCode = (string) $storedCode; // Ensure it's a string
+            $storedCode = trim($storedCode);
+            $storedCode = preg_replace('/[^0-9]/', '', $storedCode);
+            // Pad to 6 digits if needed (shouldn't be, but just in case)
+            $storedCode = str_pad($storedCode, 6, '0', STR_PAD_LEFT);
+        }
+        
+        // Ensure received code is also padded to 6 digits
+        $code = str_pad($code, 6, '0', STR_PAD_LEFT);
+        
+        \Log::info("📱 VERIFY SMS - Cache keys tried: " . implode(', ', $possibleCacheKeys));
+        \Log::info("📱 VERIFY SMS - Cache key used: " . ($usedCacheKey ?: 'NONE'));
+        \Log::info("📱 VERIFY SMS - Stored code (raw from cache): " . ($storedCode !== null ? "'{$storedCode}'" : 'NULL'));
+        \Log::info("📱 VERIFY SMS - Stored code (normalized): " . ($storedCode !== null ? "'{$storedCode}'" : 'NULL'));
+        \Log::info("📱 VERIFY SMS - Received code (normalized): '{$code}'");
         \Log::info("🔍 Code comparison: Expected='{$storedCode}' vs Received='{$code}'");
+        \Log::info("🔍 Code type comparison: Expected type=" . gettype($storedCode) . ", Received type=" . gettype($code));
+        \Log::info("🔍 Code length comparison: Expected length=" . ($storedCode !== null ? strlen($storedCode) : 0) . ", Received length=" . strlen($code));
+        \Log::info("🔍 Strict comparison (===): " . ($storedCode === $code ? 'MATCH' : 'NO MATCH'));
+        \Log::info("🔍 Loose comparison (==): " . ($storedCode == $code ? 'MATCH' : 'NO MATCH'));
         
         if (!$storedCode) {
             \Log::error("❌ VERIFY SMS - No stored code found for phone: {$phone}");
+            \Log::error("🔍 Tried cache keys: " . implode(', ', $possibleCacheKeys));
             \Log::error("🔍 Possible reasons: Code expired, wrong phone number, or cache cleared");
             
             // In simulation mode, provide helpful debugging info
@@ -878,37 +1004,48 @@ class AuthController extends Controller
             
             return response()->json([
                 'success' => false,
-                'message' => 'Verification code expired or not found.',
+                'message' => 'Verification code expired or not found. Please request a new code.',
                 'simulation_mode' => $this->isSimulationMode(),
                 'timestamp' => $timestamp,
+                'debug_info' => [
+                    'phone_formats_tried' => array_unique($possibleCacheKeys),
+                    'received_phone' => $phone,
+                    'raw_phone' => $rawPhone,
+                ],
             ], 400);
         }
 
-        if ($storedCode !== $code) {
-            \Log::error("❌ VERIFY SMS - Code mismatch. Expected: {$storedCode}, Received: {$code}");
+        // Compare normalized codes (use loose comparison as fallback)
+        if ($storedCode !== $code && $storedCode != $code) {
+            \Log::error("❌ VERIFY SMS - Code mismatch. Expected: '{$storedCode}', Received: '{$code}'");
             \Log::error("🔍 Verification failed - codes do not match");
+            \Log::error("🔍 Expected code length: " . strlen($storedCode) . ", Received code length: " . strlen($code));
+            \Log::error("🔍 Expected code type: " . gettype($storedCode) . ", Received code type: " . gettype($code));
             
             // In simulation mode, provide helpful debugging info
             if ($this->isSimulationMode()) {
-                \Log::info("🎭 SIMULATION MODE - Expected code: {$storedCode}");
-                \Log::info("🎭 SIMULATION MODE - Received code: {$code}");
+                \Log::info("🎭 SIMULATION MODE - Expected code: '{$storedCode}'");
+                \Log::info("🎭 SIMULATION MODE - Received code: '{$code}'");
                 \Log::info("🎭 SIMULATION MODE - Check the logs above for the correct code");
             }
             
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid verification code.',
+                'message' => 'Invalid verification code. Please check the code and try again.',
                 'simulation_mode' => $this->isSimulationMode(),
                 'timestamp' => $timestamp,
+                'debug_info' => [
+                    'expected_code_length' => strlen($storedCode),
+                    'received_code_length' => strlen($code),
+                    'cache_key_used' => $usedCacheKey,
+                ],
             ], 400);
         }
 
-        // Clear the stored code
-        \Cache::forget($cacheKey);
         \Log::info("✅ VERIFY SMS - Code verified successfully for phone: {$phone}");
-        \Log::info("🧹 Cache cleared for key: {$cacheKey}");
         
-        // Update user verification status
+        // Update user verification status FIRST, before clearing cache
+        // This way if update fails, code can still be reused
         if ($user) {
             $hasIdVerification = $user->verifications()->where('status', 'approved')->exists();
             
@@ -923,23 +1060,80 @@ class AuthController extends Controller
                 $shouldBeVerified = true; // Other roles follow same logic
             }
             
-            $user->update([
-                'phone_verified_at' => now(),
-                'verification_status' => $shouldBeVerified ? 'verified' : 'pending_verification',
-                'status' => 'active', // Change from 'pending' to 'active' when phone is verified
-                'can_accept_bookings' => $shouldBeVerified
-            ]);
+            // Determine the correct status based on user role and verification state
+            $newStatus = 'active'; // Default to active
             
-            \Log::info("✅ USER UPDATE - Phone verification status updated to verified");
-            \Log::info("✅ USER UPDATE - User status changed to active");
-            \Log::info("✅ USER UPDATE - Phone verified at: " . now()->format('Y-m-d H:i:s'));
+            // For pet sitters, only set to active if they're fully verified
+            // Otherwise keep their current status (might be pending_id_verification)
+            if ($user->role === 'pet_sitter' && !$shouldBeVerified) {
+                // Pet sitter needs ID verification, so don't change status if it's pending_id_verification
+                $currentStatus = $user->status;
+                if ($currentStatus === 'pending_id_verification' || $currentStatus === 'pending_verification') {
+                    $newStatus = $currentStatus; // Keep current status
+                } else {
+                    $newStatus = 'active'; // Otherwise set to active
+                }
+            }
             
-            // Dispatch real-time event for admin panel updates
-            event(new \App\Events\UserVerificationUpdated($user, 'phone', 'verified'));
-            \Log::info("📡 REAL-TIME EVENT - UserVerificationUpdated dispatched for user: {$user->id}");
+            $updateSuccess = false;
+            try {
+                $user->update([
+                    'phone_verified_at' => now(),
+                    'verification_status' => $shouldBeVerified ? 'verified' : 'pending_verification',
+                    'status' => $newStatus,
+                    'can_accept_bookings' => $shouldBeVerified
+                ]);
+                
+                $updateSuccess = true;
+                \Log::info("✅ USER UPDATE - Phone verification status updated to verified");
+                \Log::info("✅ USER UPDATE - User status set to: {$newStatus}");
+                \Log::info("✅ USER UPDATE - Phone verified at: " . now()->format('Y-m-d H:i:s'));
+            } catch (\Exception $updateError) {
+                \Log::error("❌ USER UPDATE - Failed to update user: " . $updateError->getMessage());
+                \Log::error("❌ USER UPDATE - Error details: " . $updateError->getTraceAsString());
+                // Don't clear cache if update fails - user can retry with same code
+                $updateSuccess = false;
+            }
             
-            // Check if user can be activated
-            $this->checkAndUpdateUserStatus($user);
+            // Only proceed with events and cache clearing if database update succeeded
+            if ($updateSuccess) {
+                // Dispatch real-time event for admin panel updates
+                try {
+                    event(new \App\Events\UserVerificationUpdated($user, 'phone', 'verified'));
+                    \Log::info("📡 REAL-TIME EVENT - UserVerificationUpdated dispatched for user: {$user->id}");
+                } catch (\Exception $eventError) {
+                    \Log::warning("⚠️ REAL-TIME EVENT - Failed to dispatch event: " . $eventError->getMessage());
+                }
+                
+                // Check if user can be activated (but don't let it fail the whole process)
+                try {
+                    $this->checkAndUpdateUserStatus($user);
+                } catch (\Exception $statusCheckError) {
+                    \Log::warning("⚠️ STATUS CHECK - Failed to check/update user status: " . $statusCheckError->getMessage());
+                    // Continue anyway - phone verification is complete
+                }
+                
+                // NOW clear cache ONLY AFTER successful database update
+                // Clear ALL cache keys where the code was stored (cleanup)
+                if ($usedCacheKey) {
+                    \Cache::forget($usedCacheKey);
+                    \Log::info("🧹 Cache cleared for key: {$usedCacheKey}");
+                }
+                // Also clear all possible cache keys to prevent reuse
+                foreach ($possibleCacheKeys as $keyToClear) {
+                    \Cache::forget($keyToClear);
+                }
+                \Log::info("🧹 All cache keys cleared for phone: {$phone}");
+            } else {
+                \Log::warning("⚠️ CACHE NOT CLEARED - Database update failed, keeping code in cache for retry");
+                // Return error so user knows to retry
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Code verified but failed to update user status. Please try again - your code is still valid.',
+                    'code_verified' => true,
+                    'timestamp' => $timestamp,
+                ], 500);
+            }
             
             // Broadcast admin dashboard update
             try {
@@ -985,6 +1179,22 @@ class AuthController extends Controller
         \Log::info("📤 API RESPONSE - Sending response data:", $responseData);
         
         return response()->json($responseData);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error("❌ VERIFY SMS - Validation error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request. Please check your phone number and code format.',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error("❌ VERIFY SMS - Exception: " . $e->getMessage());
+            \Log::error("❌ VERIFY SMS - Stack trace: " . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while verifying the code. Please try again.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     private function formatPhoneForSMS($phone)

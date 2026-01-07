@@ -36,6 +36,7 @@ function NavigationWrapper() {
       {/* Shared Routes */}
       <Stack.Screen name="sitter-reviews" />
       <Stack.Screen name="sitter-certificates" />
+      <Stack.Screen name="emergency" />
       
       {/* Admin Routes */}
       <Stack.Screen name="admin" />

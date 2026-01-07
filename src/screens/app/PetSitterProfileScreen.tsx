@@ -40,6 +40,7 @@ const PetSitterProfileScreen = () => {
     location: '',
     specialties: [] as string[],
     experience: '',
+    maxPets: '',
     rating: 0,
     reviews: 0,
   });
@@ -57,6 +58,7 @@ const PetSitterProfileScreen = () => {
     phone: string;
     hourlyRate: string;
     experience: string;
+    maxPets: string;
     reason: string;
   }>({
     firstName: '',
@@ -64,6 +66,7 @@ const PetSitterProfileScreen = () => {
     phone: '',
     hourlyRate: '',
     experience: '',
+    maxPets: '',
     reason: '',
   });
   
@@ -417,6 +420,7 @@ const PetSitterProfileScreen = () => {
         location: userAddress || '', // Use only real-time location
         specialties: user.specialties || [],
         experience: user.experience || '',
+        maxPets: user.maxPets !== undefined && user.maxPets !== null ? String(user.maxPets) : (user.max_pets !== undefined && user.max_pets !== null ? String(user.max_pets) : ''),
         rating: 0,
         reviews: 0,
       };
@@ -436,6 +440,16 @@ const PetSitterProfileScreen = () => {
       console.log('📱 PetSitterProfileScreen: Screen focused, refreshing user data');
       console.log('📱 PetSitterProfileScreen: Current user:', user);
       console.log('📱 PetSitterProfileScreen: Current user hourlyRate:', user?.hourlyRate);
+      console.log('📱 PetSitterProfileScreen: Current user maxPets:', user?.maxPets);
+      console.log('📱 PetSitterProfileScreen: Current user max_pets:', user?.max_pets);
+      
+      // Refresh user data from backend if maxPets is missing
+      if (user && user.role === 'pet_sitter' && (user.maxPets === undefined || user.max_pets === undefined)) {
+        console.log('📱 PetSitterProfileScreen: maxPets missing, refreshing user data from backend');
+        refresh().catch(error => {
+          console.error('Error refreshing user data:', error);
+        });
+      }
       
       // Force update profile data when screen comes into focus
       if (user) {
@@ -510,6 +524,7 @@ const PetSitterProfileScreen = () => {
         phone: user.phone || '',
         hourlyRate: user.hourlyRate ? user.hourlyRate.toString() : '',
         experience: user.experience || '',
+        maxPets: user.maxPets !== undefined && user.maxPets !== null ? String(user.maxPets) : (user.max_pets !== undefined && user.max_pets !== null ? String(user.max_pets) : ''),
         reason: '', // Leave reason empty for user to fill
       });
     }
@@ -536,6 +551,7 @@ const PetSitterProfileScreen = () => {
           location: user.address || '',
           hourlyRate: user.hourlyRate || '',
           experience: user.experience || '',
+          maxPets: user.maxPets !== undefined && user.maxPets !== null ? String(user.maxPets) : (user.max_pets !== undefined && user.max_pets !== null ? String(user.max_pets) : ''),
           specialties: user.specialties || [],
           rating: 0, // Default value since rating is not in User type
           reviews: 0, // Default value since reviews is not in User type
@@ -997,6 +1013,7 @@ const PetSitterProfileScreen = () => {
         phone: requestData.phone.trim(),
         hourlyRate: requestData.hourlyRate.trim(),
         experience: requestData.experience.trim(),
+        maxPets: requestData.maxPets.trim(),
         reason: requestData.reason.trim(),
       }, currentUser.token, currentUser.role || 'pet_sitter');
       
@@ -1356,8 +1373,18 @@ const PetSitterProfileScreen = () => {
             {/* Debug info - remove this later */}
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{profile.specialties.length}</Text>
-            <Text style={styles.statLabel}>Specialties</Text>
+            <Text style={styles.statNumber}>
+              {profile.maxPets !== undefined && profile.maxPets !== null && profile.maxPets !== '' 
+                ? String(profile.maxPets) 
+                : (profile.max_pets !== undefined && profile.max_pets !== null && profile.max_pets !== '' 
+                  ? String(profile.max_pets) 
+                  : (user?.maxPets !== undefined && user?.maxPets !== null 
+                    ? String(user.maxPets) 
+                    : (user?.max_pets !== undefined && user?.max_pets !== null 
+                      ? String(user.max_pets) 
+                      : '10')))}
+            </Text>
+            <Text style={styles.statLabel}>Max Pets</Text>
           </View>
         </View>
 
@@ -1448,6 +1475,35 @@ const PetSitterProfileScreen = () => {
               />
             </View>
 
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>
+                Max Pets (Current: {
+                  (profile.maxPets !== undefined && profile.maxPets !== null && profile.maxPets !== '') 
+                    ? profile.maxPets 
+                    : (profile.max_pets !== undefined && profile.max_pets !== null && profile.max_pets !== '') 
+                      ? profile.max_pets 
+                      : (user?.maxPets !== undefined && user?.maxPets !== null && user?.maxPets !== '') 
+                        ? String(user.maxPets) 
+                        : (user?.max_pets !== undefined && user?.max_pets !== null && user?.max_pets !== '') 
+                          ? String(user.max_pets) 
+                          : 'Not set'}
+                )
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={requestData.maxPets}
+                onChangeText={(text) => {
+                  // Only allow numbers 1-10
+                  const num = parseInt(text);
+                  if (text === '' || (num >= 1 && num <= 10)) {
+                    setRequestData({...requestData, maxPets: text});
+                  }
+                }}
+                placeholder="Enter max pets (1-10)"
+                keyboardType="numeric"
+                maxLength={2}
+              />
+            </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Reason for Changes *</Text>
@@ -1595,6 +1651,12 @@ const PetSitterProfileScreen = () => {
           <TouchableOpacity style={styles.actionItem} onPress={() => router.push('/pet-sitter-schedule')}>
             <Ionicons name="time-outline" size={24} color="#3B82F6" />
             <Text style={styles.actionText}>My Schedule</Text>
+            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.actionItem} onPress={() => router.push('/emergency')}>
+            <Ionicons name="warning-outline" size={24} color="#EF4444" />
+            <Text style={styles.actionText}>Emergency</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
         </View>

@@ -315,6 +315,7 @@ export default function Auth() {
         age: completeUserData.age || null,
         experience: completeUserData.experience || '',
         hourly_rate: completeUserData.hourlyRate || '',
+        max_pets: completeUserData.maxPets || 10,
         pet_breeds: completeUserData.selectedBreeds || [],
         specialties: completeUserData.specialties || [],
         selected_pet_types: completeUserData.selectedPetTypes || [],
@@ -391,6 +392,8 @@ export default function Auth() {
           address: result.user.address,
           experience: result.user.experience || userData.experience || '',
           hourlyRate: result.user.hourly_rate !== null && result.user.hourly_rate !== undefined ? String(result.user.hourly_rate) : (userData.hourlyRate || ''),
+          maxPets: result.user.max_pets !== null && result.user.max_pets !== undefined ? result.user.max_pets : (completeUserData.maxPets || userData.maxPets || undefined),
+          max_pets: result.user.max_pets !== null && result.user.max_pets !== undefined ? result.user.max_pets : (completeUserData.maxPets || userData.maxPets || undefined),
           aboutMe: result.user.bio || '',
           specialties: result.user.specialties || userData.specialties || [],
           email_verified: result.user.email_verified,
@@ -422,6 +425,7 @@ export default function Auth() {
         const backendUser = {
           ...result.user,
           hourly_rate: completeUser.hourlyRate !== null && completeUser.hourlyRate !== undefined ? completeUser.hourlyRate : (result.user.hourly_rate || userData.hourlyRate || ''),
+          max_pets: completeUser.maxPets !== null && completeUser.maxPets !== undefined ? completeUser.maxPets : (result.user.max_pets || completeUserData.maxPets || userData.maxPets || undefined),
         };
         console.log('Backend user object for storage:', backendUser);
         console.log('Backend user hourly_rate:', backendUser.hourly_rate);

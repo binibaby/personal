@@ -38,6 +38,23 @@ const PhoneVerificationScreen: React.FC<PhoneVerificationScreenProps> = ({ userD
   const [retryCount, setRetryCount] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
 
+  // Helper function to normalize phone number (remove spaces, dashes, etc.)
+  const normalizePhoneNumber = (phone: string): string => {
+    // Remove all non-digit characters except +
+    let normalized = phone.replace(/[^\d+]/g, '');
+    
+    // Handle Philippine numbers: convert 0XXXXXXXXXX to +63XXXXXXXXXX
+    if (normalized.startsWith('0') && normalized.length === 11) {
+      normalized = '+63' + normalized.substring(1);
+    } else if (normalized.startsWith('63') && normalized.length === 12) {
+      normalized = '+' + normalized;
+    } else if (!normalized.startsWith('+') && normalized.length === 10) {
+      normalized = '+63' + normalized;
+    }
+    
+    return normalized;
+  };
+
   const sendVerificationCode = async () => {
     if (!phoneNumber) {
       Alert.alert('Error', 'Please enter a phone number');
@@ -47,7 +64,10 @@ const PhoneVerificationScreen: React.FC<PhoneVerificationScreenProps> = ({ userD
     setIsLoading(true);
     
     try {
-      console.log('LOG PhoneVerificationScreen - Sending code to:', phoneNumber);
+      // Normalize phone number before sending
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      console.log('LOG PhoneVerificationScreen - Original phone:', phoneNumber);
+      console.log('LOG PhoneVerificationScreen - Normalized phone:', normalizedPhone);
       
       // Ensure network service is initialized
       let baseUrl = networkService.getBaseUrl();
@@ -58,14 +78,14 @@ const PhoneVerificationScreen: React.FC<PhoneVerificationScreenProps> = ({ userD
       console.log('Using base URL:', baseUrl);
       
       console.log('Making API call to send verification code');
-      console.log('Request payload:', { phone: phoneNumber });
+      console.log('Request payload:', { phone: normalizedPhone });
       
       // Use makeApiCall which has built-in timeout handling (30 seconds) and automatic retry
       const response = await makeApiCall('/api/send-verification-code', {
         method: 'POST',
         headers: getAuthHeaders(user?.token),
         body: JSON.stringify({
-          phone: phoneNumber,
+          phone: normalizedPhone,
         }),
       });
 
@@ -128,7 +148,17 @@ const PhoneVerificationScreen: React.FC<PhoneVerificationScreenProps> = ({ userD
     setIsLoading(true);
     
     try {
-      console.log('LOG PhoneVerificationScreen - Verifying code:', verificationCode);
+      // Normalize the code: trim whitespace and remove any non-digit characters
+      const normalizedCode = verificationCode.trim().replace(/[^0-9]/g, '');
+      
+      if (normalizedCode.length !== 6) {
+        Alert.alert('Error', 'Please enter a valid 6-digit verification code');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('LOG PhoneVerificationScreen - Verifying code (original):', verificationCode);
+      console.log('LOG PhoneVerificationScreen - Verifying code (normalized):', normalizedCode);
       
       // Ensure network service is initialized
       let baseUrl = networkService.getBaseUrl();
@@ -138,21 +168,40 @@ const PhoneVerificationScreen: React.FC<PhoneVerificationScreenProps> = ({ userD
       }
       console.log('Using base URL:', baseUrl);
       
+      // Normalize phone number to match the format used when sending the code
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      console.log('LOG PhoneVerificationScreen - Verifying with phone (original):', phoneNumber);
+      console.log('LOG PhoneVerificationScreen - Verifying with phone (normalized):', normalizedPhone);
+      
       // Use makeApiCall which has built-in timeout handling (30 seconds) and automatic retry
       const response = await makeApiCall('/api/verify-phone-code', {
         method: 'POST',
         headers: getAuthHeaders(user?.token),
         body: JSON.stringify({
-          phone: phoneNumber,
-          code: verificationCode,
+          phone: normalizedPhone,
+          code: normalizedCode,
         }),
       });
 
       console.log('Verify API Response Status:', response.status);
-      const data = await response.json();
-      console.log('Verify API Response Data:', data);
+      
+      // Get response text first to handle both JSON and non-JSON responses
+      const responseText = await response.text();
+      console.log('Verify API Response Text (raw):', responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('Verify API Response Data (parsed):', data);
+      } catch (parseError) {
+        console.error('Failed to parse response as JSON:', parseError);
+        console.error('Response text:', responseText);
+        Alert.alert('Error', 'Invalid response from server. Please try again.');
+        setIsLoading(false);
+        return;
+      }
 
-      if (response.ok) {
+      if (response.ok && data.success) {
         console.log('LOG PhoneVerificationScreen - Code verified successfully');
         console.log('LOG PhoneVerificationScreen - User data:', userData);
         console.log('LOG PhoneVerificationScreen - Response data:', data);
@@ -194,8 +243,11 @@ const PhoneVerificationScreen: React.FC<PhoneVerificationScreenProps> = ({ userD
           }
         }
       } else {
-        console.log('LOG PhoneVerificationScreen - API response not OK:', response.status, data);
-        Alert.alert('Error', data.message || 'Invalid verification code');
+        console.log('LOG PhoneVerificationScreen - API response not OK:', response.status);
+        console.log('LOG PhoneVerificationScreen - Response data:', data);
+        const errorMessage = data?.message || data?.error || 'Invalid verification code. Please check the code and try again.';
+        console.log('LOG PhoneVerificationScreen - Error message:', errorMessage);
+        Alert.alert('Verification Failed', errorMessage);
       }
     } catch (error: any) {
       console.error('Error verifying code:', error);

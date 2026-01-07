@@ -18,6 +18,7 @@ class ProfileChangeRequest extends Model
         'phone',
         'hourly_rate',
         'experience',
+        'max_pets',
         'bio',
         'specialties',
         'old_value',
@@ -27,6 +28,7 @@ class ProfileChangeRequest extends Model
         'old_phone',
         'old_hourly_rate',
         'old_experience',
+        'old_max_pets',
         'old_bio',
         'old_specialties',
         'reason',
@@ -45,6 +47,8 @@ class ProfileChangeRequest extends Model
         'old_hourly_rate' => 'decimal:2',
         'experience' => 'decimal:1',
         'old_experience' => 'decimal:1',
+        'max_pets' => 'integer',
+        'old_max_pets' => 'integer',
     ];
 
     // Relationships

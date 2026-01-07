@@ -40,6 +40,7 @@ class ProfileController extends Controller
                 'bio' => $user->bio,
                 'hourly_rate' => $user->hourly_rate,
                 'experience' => $user->experience,
+                'max_pets' => $user->max_pets,
                 'specialties' => $user->specialties,
                 'selected_pet_types' => $user->selected_pet_types,
                 'pet_breeds' => $user->pet_breeds,

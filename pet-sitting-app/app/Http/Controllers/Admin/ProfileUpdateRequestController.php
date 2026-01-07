@@ -154,6 +154,11 @@ class ProfileUpdateRequestController extends Controller
                 $user->experience = (string)$profileRequest->experience; // Store as string to match user table format
             }
 
+            // Update max_pets if changed (for pet sitters) - compare as integers
+            if ($profileRequest->max_pets !== null && (int)$profileRequest->max_pets != (int)($profileRequest->old_max_pets ?? 10)) {
+                $user->max_pets = (int)$profileRequest->max_pets;
+            }
+
             // Update the full name if first or last name changed
             if (($profileRequest->first_name && $profileRequest->first_name !== $profileRequest->old_first_name) || 
                 ($profileRequest->last_name && $profileRequest->last_name !== $profileRequest->old_last_name)) {
@@ -384,6 +389,10 @@ class ProfileUpdateRequestController extends Controller
         // Compare experience as numbers
         if ((float)($request->experience ?? 0) != (float)($request->old_experience ?? 0)) {
             $fields[] = 'Years of Experience';
+        }
+        // Compare max_pets as integers
+        if ((int)($request->max_pets ?? 0) != (int)($request->old_max_pets ?? 0)) {
+            $fields[] = 'Max Pets';
         }
         
         return $fields;

@@ -645,6 +645,11 @@ const PetOwnerProfileScreen = () => {
             <Text style={styles.actionText}>Find Pet Sitters</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
+          <TouchableOpacity style={styles.actionItem} onPress={() => router.push('/emergency')}>
+            <Ionicons name="warning-outline" size={24} color="#EF4444" />
+            <Text style={styles.actionText}>Emergency</Text>
+            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          </TouchableOpacity>
         </View>
         
         {/* PetSit Footer - Only visible when scrolled to bottom */}

@@ -14,6 +14,8 @@ export interface User {
   address?: string;
   experience?: string;
   hourlyRate?: string;
+  maxPets?: number | string;
+  max_pets?: number | string;
   aboutMe?: string;
   specialties?: string[];
   email_verified?: boolean;
@@ -294,6 +296,7 @@ class AuthService {
           age: userData.age || null,
           experience: userData.experience || '',
           hourly_rate: userData.hourlyRate || null,
+          max_pets: (userData as any).maxPets || 10,
           pet_breeds: userData.selectedBreeds || [],
           specialties: userData.specialties || [],
           selected_pet_types: userData.selectedPetTypes || [],
@@ -1110,6 +1113,8 @@ class AuthService {
       // Always include sitter-specific fields for pet sitters
       experience: (backendUser.role === 'pet_sitter' || backendUser.role === 'Pet Sitter') ? (backendUser.experience || '') : '',
       hourlyRate: (backendUser.role === 'pet_sitter' || backendUser.role === 'Pet Sitter') ? (backendUser.hourly_rate !== null && backendUser.hourly_rate !== undefined ? String(backendUser.hourly_rate) : '') : '',
+      maxPets: (backendUser.role === 'pet_sitter' || backendUser.role === 'Pet Sitter') ? (backendUser.max_pets !== null && backendUser.max_pets !== undefined ? backendUser.max_pets : 10) : undefined,
+      max_pets: (backendUser.role === 'pet_sitter' || backendUser.role === 'Pet Sitter') ? (backendUser.max_pets !== null && backendUser.max_pets !== undefined ? backendUser.max_pets : 10) : undefined,
       specialties: (backendUser.role === 'pet_sitter' || backendUser.role === 'Pet Sitter') ? (backendUser.specialties || []) : [],
     };
 
