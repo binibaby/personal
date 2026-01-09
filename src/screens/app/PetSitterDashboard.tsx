@@ -811,6 +811,19 @@ const PetSitterDashboard = () => {
           })}
         </ScrollView>
       </ScrollView>
+
+      {/* Floating Action Button - AI Chatbot */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/ai-chat')}
+        activeOpacity={0.8}
+      >
+        <Image 
+          source={require('../../assets/icons/chatbot.png')} 
+          style={styles.fabIcon}
+          resizeMode="contain"
+        />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 };
@@ -1162,6 +1175,27 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F59E0B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  fabIcon: {
+    width: 32,
+    height: 32,
   },
 });
 

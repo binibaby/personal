@@ -38,6 +38,10 @@ function NavigationWrapper() {
       <Stack.Screen name="sitter-certificates" />
       <Stack.Screen name="emergency" />
       
+      {/* AI Chatbot Routes */}
+      <Stack.Screen name="ai-chat" />
+      <Stack.Screen name="chatbot-config" />
+      
       {/* Admin Routes */}
       <Stack.Screen name="admin" />
       <Stack.Screen name="admin-name-update-profile" />
